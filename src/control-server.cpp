@@ -3,6 +3,7 @@
 #include "protocol.hpp"
 
 #include <obs.h>
+#include <obs-frontend-api.h>
 #include <plugin-support.h>
 
 #include <QHostInfo>
@@ -10,11 +11,13 @@
 
 namespace obsmobile {
 
-PhoneConnection::PhoneConnection(QTcpSocket *s, DeviceStore &deviceStore, QObject *parent)
+PhoneConnection::PhoneConnection(QTcpSocket *s, DeviceStore &deviceStore, std::function<int()> ports, QObject *parent)
 	: QObject(parent),
 	  socket(s),
+	  allocatePort(std::move(ports)),
 	  store(deviceStore)
 {
+	connect(&stateTimer, &QTimer::timeout, this, &PhoneConnection::pushState);
 	socket->setParent(this);
 	phone.address = socket->peerAddress().toString().remove(QStringLiteral("::ffff:"));
 	connect(socket, &QTcpSocket::readyRead, this, &PhoneConnection::onReadyRead);
@@ -25,6 +28,8 @@ PhoneConnection::PhoneConnection(QTcpSocket *s, DeviceStore &deviceStore, QObjec
 	      {"pc", QHostInfo::localHostName()},
 	      {"obs", QString::fromUtf8(obs_get_version_string())}});
 }
+
+PhoneConnection::~PhoneConnection() = default;
 
 void PhoneConnection::send(const QJsonObject &message)
 {
@@ -70,7 +75,61 @@ void PhoneConnection::handle(const QJsonObject &message)
 			emit changed();
 		}
 	}
+	else if (pair == PairState::Accepted)
+		handleAccepted(type, message);
 	// Anything else from a phone that is not accepted is ignored on purpose.
+}
+
+void PhoneConnection::onAccepted()
+{
+	camera = std::make_unique<PhoneCamera>(phone.name, allocatePort());
+	stateTimer.start(500);
+}
+
+void PhoneConnection::handleAccepted(const QString &type, const QJsonObject &message)
+{
+	if (type == "camera") {
+		if (message["state"].toString() == "start") {
+			camera->start(layoutFromName(message["layout"].toString()));
+			send({{"type", "stream"}, {"port", camera->port()}, {"latencyMs", 80}});
+		} else {
+			camera->stop();
+		}
+		pushState();
+	} else if (type == "layout") {
+		camera->setLayout(layoutFromName(message["layout"].toString()));
+		pushState();
+	} else if (type == "addToScene") {
+		camera->addToCurrentScene();
+		pushState();
+	}
+}
+
+void PhoneConnection::pushState()
+{
+	if (!camera)
+		return;
+	QJsonObject state = camera->tick();
+	obs_source_t *current = obs_frontend_get_current_scene();
+	state["scene"] = current ? QString::fromUtf8(obs_source_get_name(current)) : QString();
+	obs_source_release(current);
+	const bool live = obs_frontend_streaming_active();
+	state["live"] = live;
+	if (live) {
+		obs_output_t *output = obs_frontend_get_streaming_output();
+		obs_video_info ovi = {};
+		obs_get_video_info(&ovi);
+		if (output && ovi.fps_num)
+			state["durationMs"] = double(obs_output_get_total_frames(output)) * 1000.0 * ovi.fps_den / ovi.fps_num;
+		obs_output_release(output);
+	}
+	// On change, and every 2 s anyway so the phone's stream timer stays in sync.
+	if (state != lastState || ++ticksSinceSent >= 4) {
+		lastState = state;
+		ticksSinceSent = 0;
+		state["type"] = "state";
+		send(state);
+	}
 }
 
 void PhoneConnection::onHello(const QJsonObject &message)
@@ -87,6 +146,7 @@ void PhoneConnection::onHello(const QJsonObject &message)
 		store.touch(phone.deviceId);
 		pair = PairState::Accepted;
 		send({{"type", "pairing"}, {"state", "accepted"}});
+		onAccepted();
 		obs_log(LOG_INFO, "Remembered phone %s (%s) reconnected", qPrintable(phone.name), qPrintable(phone.address));
 		emit changed();
 		return;
@@ -108,6 +168,7 @@ void PhoneConnection::accept(bool remember)
 	if (remember)
 		reply["token"] = store.remember(phone.deviceId, phone.name, phone.model);
 	send(reply);
+	onAccepted();
 	obs_log(LOG_INFO, "Phone %s accepted%s", qPrintable(phone.name), remember ? " and remembered" : "");
 	emit changed();
 }
@@ -162,7 +223,7 @@ void ControlServer::onNewConnection()
 			socket->deleteLater();
 			continue;
 		}
-		auto *phone = new PhoneConnection(socket, store, this);
+		auto *phone = new PhoneConnection(socket, store, [this] { return freePort(); }, this);
 		connections.append(phone);
 		connect(phone, &PhoneConnection::changed, this, &ControlServer::phonesChanged);
 		connect(phone, &PhoneConnection::approvalRequested, this, [this, phone] { emit approvalRequested(phone); });
@@ -172,6 +233,18 @@ void ControlServer::onNewConnection()
 			emit phonesChanged();
 		});
 		emit phonesChanged();
+	}
+}
+
+int ControlServer::freePort() const
+{
+	// One UDP port per phone: 9711, 9712… (9710 stays with the WebSocket "secours" mode).
+	for (int port = kFirstCameraPort;; ++port) {
+		bool used = false;
+		for (auto *c : connections)
+			used = used || c->cameraPort() == port;
+		if (!used)
+			return port;
 	}
 }
 

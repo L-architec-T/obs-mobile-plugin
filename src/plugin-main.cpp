@@ -11,6 +11,7 @@ the Free Software Foundation; either version 2 of the License, or
 #include "control-server.hpp"
 #include "device-store.hpp"
 #include "mdns-announcer.hpp"
+#include "mobile-camera-source.hpp"
 #include "phones-dock.hpp"
 #include "protocol.hpp"
 
@@ -68,6 +69,7 @@ void onFrontendEvent(enum obs_frontend_event event, void *)
 
 bool obs_module_load(void)
 {
+	registerCameraSource();
 	obs_frontend_add_event_callback(onFrontendEvent, nullptr);
 	obs_log(LOG_INFO, "plugin loaded (version %s)", PLUGIN_VERSION);
 	return true;

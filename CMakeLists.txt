@@ -49,6 +49,22 @@ target_sources(
     src/device-store.cpp
     src/phones-dock.cpp
     src/pairing-dialog.cpp
+    src/phone-camera.cpp
+    src/mobile-camera-source.cpp
 )
+
+# FFmpeg (with SRT) decodes the phones' streams: OBS's own copy on Windows (obs-deps), the
+# system's on Linux.
+if(OS_LINUX)
+  pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat libavcodec libavutil)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE PkgConfig::FFMPEG)
+else()
+  find_path(FFMPEG_INCLUDE_DIR libavformat/avformat.h REQUIRED)
+  target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIR})
+  foreach(_lib avformat avcodec avutil)
+    find_library(FFMPEG_${_lib}_LIBRARY ${_lib} REQUIRED)
+    target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE ${FFMPEG_${_lib}_LIBRARY})
+  endforeach()
+endif()
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})

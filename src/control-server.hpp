@@ -1,6 +1,11 @@
 #pragma once
 
 #include "device-store.hpp"
+#include "phone-camera.hpp"
+
+#include <QTimer>
+#include <functional>
+#include <memory>
 
 #include <QHostAddress>
 #include <QImage>
@@ -34,7 +39,12 @@ struct PhoneInfo {
 class PhoneConnection : public QObject {
 	Q_OBJECT
 public:
-	PhoneConnection(QTcpSocket *socket, DeviceStore &store, QObject *parent);
+	/** [allocatePort] gives the UDP port this phone's camera stream will use. */
+	PhoneConnection(QTcpSocket *socket, DeviceStore &store, std::function<int()> allocatePort, QObject *parent);
+	~PhoneConnection() override;
+
+	/** SRT port of this phone's camera, 0 before it is accepted. */
+	int cameraPort() const { return camera ? camera->port() : 0; }
 
 	const PhoneInfo &info() const { return phone; }
 	PairState state() const { return pair; }
@@ -54,8 +64,16 @@ private:
 	void handle(const QJsonObject &message);
 	void onHello(const QJsonObject &message);
 	void send(const QJsonObject &message);
+	void onAccepted();
+	void handleAccepted(const QString &type, const QJsonObject &message);
+	void pushState();
 
 	QPointer<QTcpSocket> socket;
+	std::function<int()> allocatePort;
+	std::unique_ptr<PhoneCamera> camera;
+	QTimer stateTimer;
+	QJsonObject lastState;
+	int ticksSinceSent = 0;
 	DeviceStore &store;
 	PhoneInfo phone;
 	PairState pair = PairState::WaitingHello;
@@ -82,6 +100,7 @@ signals:
 private:
 	void onNewConnection();
 	int pendingCount() const;
+	int freePort() const;
 
 	DeviceStore &store;
 	QTcpServer server;
