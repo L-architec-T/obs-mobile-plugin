@@ -1,0 +1,91 @@
+#pragma once
+
+#include "device-store.hpp"
+
+#include <QHostAddress>
+#include <QImage>
+#include <QJsonObject>
+#include <QList>
+#include <QObject>
+#include <QPointer>
+#include <QTcpServer>
+#include <QTcpSocket>
+
+namespace obsmobile {
+
+enum class PairState { WaitingHello, Pending, Accepted, Refused };
+
+/** What a phone says about itself (hello + status messages). */
+struct PhoneInfo {
+	QString deviceId;
+	QString name;
+	QString model;
+	QString appVersion;
+	QString address;
+	int battery = -1;
+	bool charging = false;
+	int wifiDbm = 0;
+	double micDb = -100.0;
+	/** Last camera picture sent while waiting for approval ("Aperçu · pas à l'antenne"). */
+	QImage preview;
+};
+
+/** One phone's control connection. Lives on the UI thread. */
+class PhoneConnection : public QObject {
+	Q_OBJECT
+public:
+	PhoneConnection(QTcpSocket *socket, DeviceStore &store, QObject *parent);
+
+	const PhoneInfo &info() const { return phone; }
+	PairState state() const { return pair; }
+
+	void accept(bool remember);
+	void refuse();
+	void disconnectPhone();
+
+signals:
+	void changed();
+	/** Emitted once the hello is in and the PC must decide. */
+	void approvalRequested();
+	void closed();
+
+private:
+	void onReadyRead();
+	void handle(const QJsonObject &message);
+	void onHello(const QJsonObject &message);
+	void send(const QJsonObject &message);
+
+	QPointer<QTcpSocket> socket;
+	DeviceStore &store;
+	PhoneInfo phone;
+	PairState pair = PairState::WaitingHello;
+	QByteArray buffer;
+};
+
+/**
+ * Listens for phones on [kControlPort]. Unapproved phones can only introduce themselves and send
+ * a preview; nothing they say reaches OBS until the PC accepts them.
+ */
+class ControlServer : public QObject {
+	Q_OBJECT
+public:
+	ControlServer(DeviceStore &store, QObject *parent = nullptr);
+
+	bool start();
+	QList<PhoneConnection *> phones() const { return connections; }
+	void disconnectAll();
+
+signals:
+	void phonesChanged();
+	void approvalRequested(PhoneConnection *phone);
+
+private:
+	void onNewConnection();
+	int pendingCount() const;
+
+	DeviceStore &store;
+	QTcpServer server;
+	QList<PhoneConnection *> connections;
+};
+
+} // namespace obsmobile
