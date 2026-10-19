@@ -101,8 +101,12 @@ void PhoneCamera::ensureSource()
 
 	SourceRef existing(obs_get_source_by_name(name.constData()));
 	if (existing && strcmp(obs_source_get_unversioned_id(existing.ptr), kCameraSourceId) != 0) {
-		// Left by the WebSocket (secours) mode as a Media Source: ours to replace.
+		// Left by the WebSocket (secours) mode as a Media Source: ours to replace. Out of our
+		// scene and renamed first, so the name is free at once for the new source.
 		obs_log(LOG_INFO, "Replacing %s by the plugin's camera source", name.constData());
+		if (obs_sceneitem_t *old = findItem(camerasScene(false), name.constData()))
+			obs_sceneitem_remove(old);
+		obs_source_set_name(existing.ptr, (name + " (remplacée)").constData());
 		obs_source_remove(existing.ptr);
 	}
 	obs_scene_t *scene = camerasScene();
@@ -221,14 +225,18 @@ QJsonObject PhoneCamera::tick()
 {
 	obs_source_t *s = source();
 	const bool receiving = cameraIsReceiving(s);
+	const std::string problem = wantOnAir && !receiving ? cameraProblem(s) : std::string();
 	obs_source_release(s);
 	// Shown only while pictures really arrive: never a frozen or black frame on air.
 	setVisible(wantOnAir && receiving);
 	obs_sceneitem_t *it = item();
-	return {{"receiving", receiving},
-		{"onAir", it && obs_sceneitem_visible(it)},
-		{"inScene", inCurrentScene()},
-		{"layout", layoutName(layout)}};
+	QJsonObject state{{"receiving", receiving},
+			  {"onAir", it && obs_sceneitem_visible(it)},
+			  {"inScene", inCurrentScene()},
+			  {"layout", layoutName(layout)}};
+	if (!problem.empty())
+		state["cameraError"] = QString::fromStdString(problem);
+	return state;
 }
 
 } // namespace obsmobile

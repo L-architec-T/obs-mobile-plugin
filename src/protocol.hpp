@@ -17,7 +17,8 @@
 //   {"type":"pairing","state":"pending"|"accepted"|"refused","token":"…"?}  (token when remembered)
 //   {"type":"stream","port":9711,"latencyMs":80}     where to send SRT (MPEG-TS, H.264 + AAC)
 //   {"type":"state","scene":"…","live":bool,"durationMs":n?,"receiving":bool,"onAir":bool,
-//    "inScene":bool,"layout":"…"}                     on change, and every 2 s
+//    "inScene":bool,"layout":"…","cameraError":"…"?}  on change, and every 2 s; cameraError
+//                    says why OBS cannot receive the phone (French, shown as is)
 //   {"type":"return","port":4461,"key":"…","width":960,"height":540}
 //                    connect to port, send key + "\n", then read H.264 frames (program-return.hpp)
 

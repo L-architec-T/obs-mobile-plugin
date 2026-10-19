@@ -13,6 +13,7 @@ extern "C" {
 }
 
 #include <atomic>
+#include <mutex>
 #include <string>
 #include <thread>
 
@@ -38,6 +39,15 @@ struct CameraSource {
 	std::atomic<bool> stopping{false};
 	std::atomic<uint64_t> lastFrameNs{0};
 	int lastError = 0;
+	// Why it cannot listen right now, for the phone (empty when fine). Guarded by errorMutex.
+	std::mutex errorMutex;
+	std::string errorText;
+
+	void setError(std::string text)
+	{
+		std::lock_guard lock(errorMutex);
+		errorText = std::move(text);
+	}
 
 	void start()
 	{
@@ -80,16 +90,20 @@ struct CameraSource {
 		const int opened = avformat_open_input(&fmt, url.c_str(), av_find_input_format("mpegts"), &opts);
 		av_dict_free(&opts);
 		if (opened < 0) {
-			// avformat_open_input frees fmt on failure. Logged once per kind of failure.
-			if (opened != lastError) {
-				char text[AV_ERROR_MAX_STRING_SIZE] = {};
-				av_strerror(opened, text, sizeof(text));
+			// avformat_open_input frees fmt on failure. Logged once per kind of failure; an
+			// interruption is only this source stopping.
+			if (opened == AVERROR_EXIT)
+				return;
+			char text[AV_ERROR_MAX_STRING_SIZE] = {};
+			av_strerror(opened, text, sizeof(text));
+			if (opened != lastError)
 				obs_log(LOG_WARNING, "Camera on port %d: cannot listen (%s)", port, text);
-			}
 			lastError = opened;
+			setError("port UDP " + std::to_string(port) + " : " + text);
 			return;
 		}
 		lastError = 0;
+		setError({});
 		if (avformat_find_stream_info(fmt, nullptr) < 0) {
 			avformat_close_input(&fmt);
 			return;
@@ -275,6 +289,21 @@ void registerCameraSource()
 	info.get_defaults = getDefaults;
 	info.icon_type = OBS_ICON_TYPE_CAMERA;
 	obs_register_source(&info);
+}
+
+std::string cameraProblem(obs_source_t *source)
+{
+	if (!source)
+		return "source caméra introuvable dans OBS";
+	if (strcmp(obs_source_get_unversioned_id(source), kCameraSourceId) != 0)
+		return std::string("« ") + obs_source_get_name(source) + " » n'est pas une source du plugin";
+	auto *self = static_cast<CameraSource *>(obs_obj_get_data(source));
+	if (!self)
+		return "source caméra non initialisée";
+	if (self->port <= 0)
+		return "source caméra sans port";
+	std::lock_guard lock(self->errorMutex);
+	return self->errorText;
 }
 
 bool cameraIsReceiving(obs_source_t *source)
