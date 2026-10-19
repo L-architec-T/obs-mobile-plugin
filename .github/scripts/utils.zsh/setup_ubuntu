@@ -62,5 +62,12 @@ if (( ! (${skips[(Ie)all]} + ${skips[(Ie)deps]}) )) {
   }
 
   sudo apt-get install ${apt_args} ${_qt_packages}
+
+  # OBS Mobile: mDNS announcement (Avahi) and the phones' SRT streams (FFmpeg).
+  sudo apt-get install ${apt_args} \
+    libavahi-client-dev${suffix} \
+    libavformat-dev${suffix} \
+    libavcodec-dev${suffix} \
+    libavutil-dev${suffix}
   log_group
 }

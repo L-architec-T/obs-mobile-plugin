@@ -31,7 +31,18 @@ extern const char *PLUGIN_NAME;
 extern const char *PLUGIN_VERSION;
 
 void obs_log(int log_level, const char *format, ...);
-extern void blogva(int log_level, const char *format, va_list args);
+
+#ifdef __cplusplus
+}
+#endif
+
+// blogva() comes from libobs, declared there with its DLL linkage: redeclaring it here breaks
+// MSVC builds when this header is included before obs.h.
+#include <util/base.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #ifdef __cplusplus
 }
