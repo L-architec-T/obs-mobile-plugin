@@ -16,12 +16,18 @@ qu'il n'a pas créées.
 
 ## Installation (Windows)
 
-1. Télécharge la dernière version dans [Releases](https://github.com/L-architec-T/obs-mobile-plugin/releases).
-2. Ferme OBS, puis décompresse l'archive `obs-mobile-…-windows-x64.zip` dans
-   `C:\ProgramData\obs-studio\plugins` (crée le dossier `plugins` s'il n'existe pas). Tu dois
-   obtenir `C:\ProgramData\obs-studio\plugins\obs-mobile\bin\64bit\obs-mobile.dll`.
-3. Rouvre OBS. Au premier lancement, autorise OBS dans le pare-feu Windows (réseau privé).
+1. Télécharge `obs-mobile-…-windows-x64-installer.exe` dans la dernière version des
+   [Releases](https://github.com/L-architec-T/obs-mobile-plugin/releases).
+2. Lance-le et suis les étapes. Il te demande de fermer OBS s'il est ouvert, installe le plugin et
+   ouvre ses ports dans le pare-feu Windows (réseaux privés seulement).
+3. Rouvre OBS.
 4. Sur le téléphone, ouvre OBS Mobile : ton PC apparaît avec le badge « PLUGIN ✓ ».
+
+Pour le retirer : *Paramètres → Applications → OBS Mobile (plugin OBS) → Désinstaller*.
+
+Sans installateur : décompresse `obs-mobile-…-windows-x64.zip` dans
+`C:\ProgramData\obs-studio\plugins` (OBS fermé), pour obtenir
+`C:\ProgramData\obs-studio\plugins\obs-mobile\bin\64bit\obs-mobile.dll`.
 
 OBS Studio 31 ou plus récent, 64 bits.
 

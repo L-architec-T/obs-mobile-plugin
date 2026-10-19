@@ -67,6 +67,23 @@ function Package {
     }
     Compress-Archive -Force @CompressArgs
     Log-Group
+
+    # OBS Mobile: an installer next to the archive (Inno Setup, preinstalled on GitHub's runners).
+    Log-Group "Building the ${ProductName} installer..."
+    $Iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+    if ( ! ( Test-Path $Iscc ) ) {
+        choco install innosetup --no-progress -y
+    }
+    & $Iscc /Q `
+        "/DAppVersion=${ProductVersion}" `
+        "/DSourceDir=${ProjectRoot}\release\${Configuration}" `
+        "/DOutputDir=${ProjectRoot}\release" `
+        "/DOutputBaseName=${OutputName}-installer" `
+        "${ProjectRoot}\build-aux\installer.iss"
+    if ( $LASTEXITCODE -ne 0 ) {
+        throw "Inno Setup failed with exit code ${LASTEXITCODE}"
+    }
+    Log-Group
 }
 
 Package
