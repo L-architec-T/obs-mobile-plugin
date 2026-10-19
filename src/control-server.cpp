@@ -98,6 +98,8 @@ void PhoneConnection::handleAccepted(const QString &type, const QJsonObject &mes
 {
 	if (type == "camera") {
 		if (message["state"].toString() == "start") {
+			obs_log(LOG_INFO, "Phone %s: camera start, layout %s, mirror %d", qPrintable(phone.name),
+				qPrintable(message["layout"].toString()), message["mirror"].toBool());
 			camera->setMirror(message["mirror"].toBool());
 			camera->start(layoutFromName(message["layout"].toString()));
 			send({{"type", "stream"}, {"port", camera->port()}, {"latencyMs", 80}});
@@ -106,9 +108,11 @@ void PhoneConnection::handleAccepted(const QString &type, const QJsonObject &mes
 		}
 		pushState();
 	} else if (type == "layout") {
+		obs_log(LOG_INFO, "Phone %s: layout %s", qPrintable(phone.name), qPrintable(message["layout"].toString()));
 		camera->setLayout(layoutFromName(message["layout"].toString()));
 		pushState();
 	} else if (type == "mirror") {
+		obs_log(LOG_INFO, "Phone %s: mirror %d", qPrintable(phone.name), message["on"].toBool());
 		camera->setMirror(message["on"].toBool());
 		pushState();
 	} else if (type == "addToScene") {

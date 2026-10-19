@@ -3,16 +3,22 @@
 #include <obs-module.h>
 #include <plugin-support.h>
 #include <graphics/graphics.h>
+#include <graphics/matrix4.h>
 
 #include <algorithm>
+#include <cstring>
+#include <mutex>
 
 /*
  * "OBS Mobile · Flou": what is on air, blurred, full canvas. Put under a phone shown full height,
  * it turns the sides around the 9:16 picture into a blurred view of the scene below. OBS has no
  * blur of its own, hence this source.
  *
- * It renders the program (output channel 0) itself. That program contains this source (through
- * the "OBS Mobile · Caméras" scene): the nested call draws nothing, which ends the recursion.
+ * It draws the items of the scene on air (set from the UI thread by [setBlurProgramScene]) one
+ * by one, at their place, leaving out "OBS Mobile · Caméras". Never the scene or the transition
+ * themselves: this source is inside them, and drawing them again from here froze OBS (the
+ * transition's lock) or broke the rest of the scene's drawing. If our scene is nested deeper, the
+ * nested call to this source draws nothing, which ends the recursion.
  */
 
 namespace obsmobile {
@@ -25,12 +31,45 @@ constexpr int kBlurPasses = 3;
 
 thread_local bool renderingProgram = false;
 
+std::mutex programMutex;
+obs_weak_source_t *programScene = nullptr;
+
+obs_source_t *currentProgram()
+{
+	std::lock_guard lock(programMutex);
+	return programScene ? obs_weak_source_get_source(programScene) : nullptr;
+}
+
 struct Backdrop {
 	obs_source_t *source = nullptr;
 	gs_effect_t *effect = nullptr;
 	gs_texrender_t *ping = nullptr;
 	gs_texrender_t *pong = nullptr;
 };
+
+/** The scene's visible items, each at its place, except the app's own scene. */
+void drawSceneItems(obs_source_t *sceneSource)
+{
+	obs_scene_t *scene = obs_scene_from_source(sceneSource);
+	if (!scene)
+		return;
+	obs_scene_enum_items(
+		scene,
+		[](obs_scene_t *, obs_sceneitem_t *item, void *) {
+			obs_source_t *source = obs_sceneitem_get_source(item);
+			const char *name = obs_source_get_name(source);
+			if (!obs_sceneitem_visible(item) || (name && strcmp(name, kCamerasSceneName) == 0))
+				return true;
+			matrix4 transform;
+			obs_sceneitem_get_draw_transform(item, &transform);
+			gs_matrix_push();
+			gs_matrix_mul(&transform);
+			obs_source_video_render(source);
+			gs_matrix_pop();
+			return true;
+		},
+		nullptr);
+}
 
 void canvasSize(uint32_t &width, uint32_t &height)
 {
@@ -115,7 +154,7 @@ void render(void *data, gs_effect_t *)
 	auto *self = static_cast<Backdrop *>(data);
 	if (renderingProgram || !self->effect)
 		return;
-	obs_source_t *program = obs_get_output_source(0);
+	obs_source_t *program = currentProgram();
 	if (!program)
 		return;
 
@@ -134,7 +173,7 @@ void render(void *data, gs_effect_t *)
 		gs_ortho(0.0f, float(cw), 0.0f, float(ch), -100.0f, 100.0f);
 		gs_blend_state_push();
 		gs_blend_function(GS_BLEND_ONE, GS_BLEND_INVSRCALPHA);
-		obs_source_video_render(program);
+		drawSceneItems(program);
 		gs_blend_state_pop();
 		gs_texrender_end(self->ping);
 	}
@@ -160,6 +199,14 @@ void render(void *data, gs_effect_t *)
 }
 
 } // namespace
+
+void setBlurProgramScene(obs_source_t *scene)
+{
+	obs_weak_source_t *weak = scene ? obs_source_get_weak_source(scene) : nullptr;
+	std::lock_guard lock(programMutex);
+	obs_weak_source_release(programScene);
+	programScene = weak;
+}
 
 void registerBlurBackdrop()
 {

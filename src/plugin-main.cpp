@@ -59,9 +59,14 @@ void start()
 
 void onFrontendEvent(enum obs_frontend_event event, void *)
 {
-	if (event == OBS_FRONTEND_EVENT_FINISHED_LOADING) {
-		start();
+	if (event == OBS_FRONTEND_EVENT_FINISHED_LOADING || event == OBS_FRONTEND_EVENT_SCENE_CHANGED) {
+		obs_source_t *scene = obs_frontend_get_current_scene();
+		setBlurProgramScene(scene);
+		obs_source_release(scene);
+		if (event == OBS_FRONTEND_EVENT_FINISHED_LOADING)
+			start();
 	} else if (event == OBS_FRONTEND_EVENT_EXIT) {
+		setBlurProgramScene(nullptr);
 		// Phones get a clean close, and the mDNS record is withdrawn, before Qt goes away.
 		if (plugin)
 			plugin->server.disconnectAll();

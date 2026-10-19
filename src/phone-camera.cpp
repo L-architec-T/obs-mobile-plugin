@@ -216,8 +216,10 @@ void PhoneCamera::ensureSource()
 void PhoneCamera::place()
 {
 	obs_sceneitem_t *it = item();
-	if (!it)
+	if (!it) {
+		obs_log(LOG_WARNING, "%s: not in the cameras scene, cannot place it", qPrintable(inputName));
 		return;
+	}
 	obs_video_info ovi = {};
 	obs_get_video_info(&ovi);
 	const float w = float(ovi.base_width ? ovi.base_width : 1920);
