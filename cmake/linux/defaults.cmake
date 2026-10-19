@@ -20,7 +20,8 @@ set(CPACK_GENERATOR "DEB")
 # dpkg-shlibdeps cannot place libobs (OBS from its PPA): dependencies are listed by hand.
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS OFF)
 set(CPACK_DEBIAN_PACKAGE_DEPENDS "obs-studio, libavahi-client3")
-set(CPACK_DEBIAN_PACKAGE_MAINTAINER "${PLUGIN_EMAIL}")
+# No e-mail published: the maintainer is the GitHub account.
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "L-architec-T")
 set(CPACK_SET_DESTDIR ON)
 
 if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.25.0 OR NOT CMAKE_CROSSCOMPILING)
