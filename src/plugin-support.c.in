@@ -18,6 +18,10 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <plugin-support.h>
 
+// From libobs (util/base.h). Declared only here, where obs.h is not included: two declarations
+// with different DLL linkage in one file break MSVC builds.
+extern void blogva(int log_level, const char *format, va_list args);
+
 const char *PLUGIN_NAME = "@CMAKE_PROJECT_NAME@";
 const char *PLUGIN_VERSION = "@CMAKE_PROJECT_VERSION@";
 

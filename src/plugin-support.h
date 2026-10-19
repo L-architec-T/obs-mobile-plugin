@@ -31,11 +31,6 @@ extern const char *PLUGIN_NAME;
 extern const char *PLUGIN_VERSION;
 
 void obs_log(int log_level, const char *format, ...);
-// From libobs: same DLL linkage as its own declaration (util/base.h), or MSVC refuses both.
-#ifdef _MSC_VER
-__declspec(dllimport)
-#endif
-extern void blogva(int log_level, const char *format, va_list args);
 
 #ifdef __cplusplus
 }
