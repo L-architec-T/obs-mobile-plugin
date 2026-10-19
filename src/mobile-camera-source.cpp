@@ -211,7 +211,7 @@ struct CameraSource {
 
 const char *getName(void *)
 {
-	return "OBS Mobile · caméra";
+	return obs_module_text("MobileCamera");
 }
 
 void *create(obs_data_t *settings, obs_source_t *source)
