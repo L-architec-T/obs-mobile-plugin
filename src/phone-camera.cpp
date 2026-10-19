@@ -74,6 +74,11 @@ PhoneCamera::~PhoneCamera()
 	setVisible(false);
 	if (obs_source_t *s = source()) {
 		obs_source_set_muted(s, true);
+		// Frees the port for the next phone.
+		obs_data_t *settings = obs_data_create();
+		obs_data_set_int(settings, "port", 0);
+		obs_source_update(s, settings);
+		obs_data_release(settings);
 		obs_source_release(s);
 	}
 }
@@ -99,8 +104,6 @@ void PhoneCamera::ensureSource()
 		// Left by the WebSocket (secours) mode as a Media Source: ours to replace.
 		obs_log(LOG_INFO, "Replacing %s by the plugin's camera source", name.constData());
 		obs_source_remove(existing.ptr);
-	} else if (existing) {
-		obs_source_update(existing.ptr, settings);
 	}
 	obs_scene_t *scene = camerasScene();
 	if (!findItem(scene, name.constData())) {
@@ -113,6 +116,9 @@ void PhoneCamera::ensureSource()
 		obs_source_set_muted(src, true);
 		obs_source_release(src);
 	}
+	// Starts listening: a camera source never does on its own (see mobile-camera-source.cpp).
+	if (SourceRef ours(obs_get_source_by_name(name.constData())); ours)
+		obs_source_update(ours.ptr, settings);
 	obs_data_release(settings);
 }
 

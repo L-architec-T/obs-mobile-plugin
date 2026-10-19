@@ -13,6 +13,7 @@ the Free Software Foundation; either version 2 of the License, or
 #include "mdns-announcer.hpp"
 #include "mobile-camera-source.hpp"
 #include "phones-dock.hpp"
+#include "program-return.hpp"
 #include "protocol.hpp"
 
 #include <obs-frontend-api.h>
@@ -34,7 +35,8 @@ using namespace obsmobile;
 // Everything lives on the UI thread, created once OBS's window exists and destroyed on exit.
 struct Plugin {
 	DeviceStore store;
-	ControlServer server{store};
+	ProgramReturn programReturn;
+	ControlServer server{store, programReturn};
 	std::unique_ptr<MdnsAnnouncer> announcer;
 };
 
@@ -43,6 +45,7 @@ std::unique_ptr<Plugin> plugin;
 void start()
 {
 	plugin = std::make_unique<Plugin>();
+	plugin->programReturn.start();
 	if (plugin->server.start())
 		plugin->announcer = MdnsAnnouncer::start(QHostInfo::localHostName().toStdString(), kControlPort);
 
@@ -70,6 +73,7 @@ void onFrontendEvent(enum obs_frontend_event event, void *)
 bool obs_module_load(void)
 {
 	registerCameraSource();
+	registerReturnOutput();
 	obs_frontend_add_event_callback(onFrontendEvent, nullptr);
 	obs_log(LOG_INFO, "plugin loaded (version %s)", PLUGIN_VERSION);
 	return true;

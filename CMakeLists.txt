@@ -51,6 +51,7 @@ target_sources(
     src/pairing-dialog.cpp
     src/phone-camera.cpp
     src/mobile-camera-source.cpp
+    src/program-return.cpp
 )
 
 # FFmpeg (with SRT) decodes the phones' streams: OBS's own copy on Windows (obs-deps), the

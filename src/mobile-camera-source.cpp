@@ -37,6 +37,7 @@ struct CameraSource {
 	std::thread worker;
 	std::atomic<bool> stopping{false};
 	std::atomic<uint64_t> lastFrameNs{0};
+	int lastError = 0;
 
 	void start()
 	{
@@ -78,8 +79,17 @@ struct CameraSource {
 		av_dict_set(&opts, "probesize", "500000", 0);
 		const int opened = avformat_open_input(&fmt, url.c_str(), av_find_input_format("mpegts"), &opts);
 		av_dict_free(&opts);
-		if (opened < 0)
-			return; // avformat_open_input frees fmt on failure
+		if (opened < 0) {
+			// avformat_open_input frees fmt on failure. Logged once per kind of failure.
+			if (opened != lastError) {
+				char text[AV_ERROR_MAX_STRING_SIZE] = {};
+				av_strerror(opened, text, sizeof(text));
+				obs_log(LOG_WARNING, "Camera on port %d: cannot listen (%s)", port, text);
+			}
+			lastError = opened;
+			return;
+		}
+		lastError = 0;
 		if (avformat_find_stream_info(fmt, nullptr) < 0) {
 			avformat_close_input(&fmt);
 			return;
@@ -214,15 +224,14 @@ const char *getName(void *)
 	return obs_module_text("MobileCamera");
 }
 
-void *create(obs_data_t *settings, obs_source_t *source)
+void *create(obs_data_t *, obs_source_t *source)
 {
+	// Never listens on its own, even with a port saved in the scene collection: only a connected
+	// phone (PhoneCamera) gives it one, so a phone that is gone never holds a port.
 	auto *self = new CameraSource;
 	self->source = source;
-	self->port = int(obs_data_get_int(settings, "port"));
 	// Show the newest frame right away instead of scheduling frames by their timestamps.
 	obs_source_set_async_unbuffered(source, true);
-	if (self->port > 0)
-		self->start();
 	return self;
 }
 

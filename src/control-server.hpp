@@ -2,6 +2,7 @@
 
 #include "device-store.hpp"
 #include "phone-camera.hpp"
+#include "program-return.hpp"
 
 #include <QTimer>
 #include <functional>
@@ -40,7 +41,8 @@ class PhoneConnection : public QObject {
 	Q_OBJECT
 public:
 	/** [allocatePort] gives the UDP port this phone's camera stream will use. */
-	PhoneConnection(QTcpSocket *socket, DeviceStore &store, std::function<int()> allocatePort, QObject *parent);
+	PhoneConnection(QTcpSocket *socket, DeviceStore &store, ProgramReturn &programReturn,
+			std::function<int()> allocatePort, QObject *parent);
 	~PhoneConnection() override;
 
 	/** SRT port of this phone's camera, 0 before it is accepted. */
@@ -75,6 +77,7 @@ private:
 	QJsonObject lastState;
 	int ticksSinceSent = 0;
 	DeviceStore &store;
+	ProgramReturn &programReturn;
 	PhoneInfo phone;
 	PairState pair = PairState::WaitingHello;
 	QByteArray buffer;
@@ -87,7 +90,7 @@ private:
 class ControlServer : public QObject {
 	Q_OBJECT
 public:
-	ControlServer(DeviceStore &store, QObject *parent = nullptr);
+	ControlServer(DeviceStore &store, ProgramReturn &programReturn, QObject *parent = nullptr);
 
 	bool start();
 	QList<PhoneConnection *> phones() const { return connections; }
@@ -103,6 +106,7 @@ private:
 	int freePort() const;
 
 	DeviceStore &store;
+	ProgramReturn &programReturn;
 	QTcpServer server;
 	QList<PhoneConnection *> connections;
 };

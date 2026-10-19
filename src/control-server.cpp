@@ -11,11 +11,13 @@
 
 namespace obsmobile {
 
-PhoneConnection::PhoneConnection(QTcpSocket *s, DeviceStore &deviceStore, std::function<int()> ports, QObject *parent)
+PhoneConnection::PhoneConnection(QTcpSocket *s, DeviceStore &deviceStore, ProgramReturn &programReturn,
+				 std::function<int()> ports, QObject *parent)
 	: QObject(parent),
 	  socket(s),
 	  allocatePort(std::move(ports)),
-	  store(deviceStore)
+	  store(deviceStore),
+	  programReturn(programReturn)
 {
 	connect(&stateTimer, &QTimer::timeout, this, &PhoneConnection::pushState);
 	socket->setParent(this);
@@ -29,7 +31,10 @@ PhoneConnection::PhoneConnection(QTcpSocket *s, DeviceStore &deviceStore, std::f
 	      {"obs", QString::fromUtf8(obs_get_version_string())}});
 }
 
-PhoneConnection::~PhoneConnection() = default;
+PhoneConnection::~PhoneConnection()
+{
+	programReturn.release(this);
+}
 
 void PhoneConnection::send(const QJsonObject &message)
 {
@@ -102,6 +107,17 @@ void PhoneConnection::handleAccepted(const QString &type, const QJsonObject &mes
 	} else if (type == "addToScene") {
 		camera->addToCurrentScene();
 		pushState();
+	} else if (type == "return") {
+		if (message["state"].toString() == "start") {
+			const QSize size = programReturn.size();
+			send({{"type", "return"},
+			      {"port", kReturnPort},
+			      {"key", QString::fromLatin1(programReturn.issueKey(this))},
+			      {"width", size.width()},
+			      {"height", size.height()}});
+		} else {
+			programReturn.release(this);
+		}
 	}
 }
 
@@ -190,7 +206,10 @@ void PhoneConnection::disconnectPhone()
 		socket->abort();
 }
 
-ControlServer::ControlServer(DeviceStore &deviceStore, QObject *parent) : QObject(parent), store(deviceStore)
+ControlServer::ControlServer(DeviceStore &deviceStore, ProgramReturn &ret, QObject *parent)
+	: QObject(parent),
+	  store(deviceStore),
+	  programReturn(ret)
 {
 	connect(&server, &QTcpServer::newConnection, this, &ControlServer::onNewConnection);
 }
@@ -223,7 +242,7 @@ void ControlServer::onNewConnection()
 			socket->deleteLater();
 			continue;
 		}
-		auto *phone = new PhoneConnection(socket, store, [this] { return freePort(); }, this);
+		auto *phone = new PhoneConnection(socket, store, programReturn, [this] { return freePort(); }, this);
 		connections.append(phone);
 		connect(phone, &PhoneConnection::changed, this, &ControlServer::phonesChanged);
 		connect(phone, &PhoneConnection::approvalRequested, this, [this, phone] { emit approvalRequested(phone); });
