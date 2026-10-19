@@ -14,6 +14,13 @@ constexpr const char *kCamerasScene = "OBS Mobile · Caméras";
 enum class Layout { Full, Side, Corner };
 
 Layout layoutFromName(const QString &name);
+
+/**
+ * Takes out of OBS everything OBS Mobile created: the "OBS Mobile · Caméras" scene (and its place
+ * in the user's scenes), the phones' camera sources and the Media Sources of the WebSocket mode.
+ * Nothing else is touched. Returns how many scenes and sources were removed. UI thread only.
+ */
+int removeEverythingCreated();
 QString layoutName(Layout layout);
 
 /**

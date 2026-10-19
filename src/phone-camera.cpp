@@ -6,6 +6,7 @@
 #include <plugin-support.h>
 
 #include <cstring>
+#include <vector>
 
 namespace obsmobile {
 
@@ -39,6 +40,73 @@ obs_sceneitem_t *findItem(obs_scene_t *scene, const char *sourceName)
 }
 
 } // namespace
+
+namespace {
+
+bool ownedByUs(obs_source_t *source)
+{
+	const char *name = obs_source_get_name(source);
+	if (!name || strncmp(name, kScenePrefix, strlen(kScenePrefix)) != 0)
+		return false;
+	const char *id = obs_source_get_unversioned_id(source);
+	if (strcmp(id, kCameraSourceId) == 0)
+		return true;
+	// The WebSocket mode's Media Sources: named by the app, reading an SRT stream.
+	if (strcmp(id, "ffmpeg_source") != 0)
+		return false;
+	obs_data_t *settings = obs_source_get_settings(source);
+	const bool srt = strncmp(obs_data_get_string(settings, "input"), "srt://", 6) == 0;
+	obs_data_release(settings);
+	return srt;
+}
+
+} // namespace
+
+int removeEverythingCreated()
+{
+	int removed = 0;
+	SourceRef ours(obs_get_source_by_name(kCamerasScene));
+	if (ours) {
+		// Out of every scene that shows it first, then the scene itself.
+		struct Ctx {
+			obs_source_t *target;
+		} ctx{ours.ptr};
+		obs_enum_scenes(
+			[](void *data, obs_source_t *sceneSource) {
+				auto *c = static_cast<Ctx *>(data);
+				obs_scene_t *scene = obs_scene_from_source(sceneSource);
+				if (scene && sceneSource != c->target) {
+					obs_scene_enum_items(
+						scene,
+						[](obs_scene_t *, obs_sceneitem_t *item, void *target) {
+							if (obs_sceneitem_get_source(item) == target)
+								obs_sceneitem_remove(item);
+							return true;
+						},
+						c->target);
+				}
+				return true;
+			},
+			&ctx);
+		obs_source_remove(ours.ptr);
+		++removed;
+	}
+	std::vector<obs_source_t *> inputs;
+	obs_enum_sources(
+		[](void *data, obs_source_t *source) {
+			if (ownedByUs(source))
+				static_cast<std::vector<obs_source_t *> *>(data)->push_back(obs_source_get_ref(source));
+			return true;
+		},
+		&inputs);
+	for (obs_source_t *source : inputs) {
+		obs_log(LOG_INFO, "Removing %s", obs_source_get_name(source));
+		obs_source_remove(source);
+		obs_source_release(source);
+		++removed;
+	}
+	return removed;
+}
 
 Layout layoutFromName(const QString &name)
 {

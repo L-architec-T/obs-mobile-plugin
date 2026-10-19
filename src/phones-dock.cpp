@@ -1,5 +1,7 @@
 #include "phones-dock.hpp"
 
+#include "phone-camera.hpp"
+
 #include "control-server.hpp"
 #include "device-store.hpp"
 #include "pairing-dialog.hpp"
@@ -8,6 +10,7 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QVBoxLayout>
@@ -74,6 +77,26 @@ PhonesDock::PhonesDock(ControlServer &s, DeviceStore &d, std::function<bool()> v
 	auto *disconnectAll = new QPushButton(QStringLiteral("Tout déconnecter"));
 	connect(disconnectAll, &QPushButton::clicked, this, [this] { server.disconnectAll(); });
 	column->addWidget(disconnectAll);
+	auto *removeAll = new QPushButton(QStringLiteral("Retirer d'OBS ce qu'OBS Mobile a créé…"));
+	connect(removeAll, &QPushButton::clicked, this, [this] {
+		const auto answer = QMessageBox::question(
+			this, QStringLiteral("Retirer OBS Mobile de la collection de scènes"),
+			QStringLiteral("Les téléphones seront déconnectés, puis la scène « %1 » (y compris là où tu l'as "
+				       "ajoutée) et les sources des téléphones seront supprimées. Tes autres scènes et sources "
+				       "ne sont pas touchées.\n\nContinuer ?")
+				.arg(QString::fromUtf8(kCamerasScene)));
+		if (answer != QMessageBox::Yes)
+			return;
+		server.disconnectAll();
+		// After the phones' connections are gone: they hide their sources on the way out.
+		QTimer::singleShot(500, this, [this] {
+			const int removed = removeEverythingCreated();
+			QMessageBox::information(this, QStringLiteral("OBS Mobile"),
+						 removed ? QStringLiteral("%1 élément(s) retiré(s) d'OBS.").arg(removed)
+							 : QStringLiteral("Rien à retirer."));
+		});
+	});
+	column->addWidget(removeAll);
 
 	auto *scroll = new QScrollArea;
 	scroll->setWidget(content);
