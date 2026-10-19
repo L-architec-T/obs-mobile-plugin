@@ -20,6 +20,7 @@ PhoneConnection::PhoneConnection(QTcpSocket *s, DeviceStore &deviceStore, Progra
 	  programReturn(programReturn)
 {
 	connect(&stateTimer, &QTimer::timeout, this, &PhoneConnection::pushState);
+	connect(&pingTimer, &QTimer::timeout, this, &PhoneConnection::ping);
 	socket->setParent(this);
 	phone.address = socket->peerAddress().toString().remove(QStringLiteral("::ffff:"));
 	connect(socket, &QTcpSocket::readyRead, this, &PhoneConnection::onReadyRead);
@@ -89,6 +90,8 @@ void PhoneConnection::onAccepted()
 {
 	camera = std::make_unique<PhoneCamera>(phone.name, allocatePort());
 	stateTimer.start(500);
+	pingTimer.start(3000);
+	ping();
 }
 
 void PhoneConnection::handleAccepted(const QString &type, const QJsonObject &message)
@@ -107,6 +110,12 @@ void PhoneConnection::handleAccepted(const QString &type, const QJsonObject &mes
 	} else if (type == "addToScene") {
 		camera->addToCurrentScene();
 		pushState();
+	} else if (type == "pong") {
+		if (message["id"].toInt(-1) == pingId && pingClock.isValid()) {
+			phone.rttMs = int(pingClock.elapsed());
+			pingClock.invalidate();
+			emit changed();
+		}
 	} else if (type == "return") {
 		if (message["state"].toString() == "start") {
 			const QSize size = programReturn.size();
@@ -121,11 +130,24 @@ void PhoneConnection::handleAccepted(const QString &type, const QJsonObject &mes
 	}
 }
 
+void PhoneConnection::ping()
+{
+	// An unanswered ping means a phone that stopped answering: no figure rather than a stale one.
+	if (pingClock.isValid() && pingClock.elapsed() > 3000)
+		phone.rttMs = -1;
+	pingClock.start();
+	send({{"type", "ping"}, {"id", ++pingId}});
+}
+
 void PhoneConnection::pushState()
 {
 	if (!camera)
 		return;
 	QJsonObject state = camera->tick();
+	if (const bool onAir = state["onAir"].toBool(); onAir != phone.onAir) {
+		phone.onAir = onAir;
+		emit changed();
+	}
 	obs_source_t *current = obs_frontend_get_current_scene();
 	state["scene"] = current ? QString::fromUtf8(obs_source_get_name(current)) : QString();
 	obs_source_release(current);

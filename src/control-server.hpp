@@ -4,6 +4,7 @@
 #include "phone-camera.hpp"
 #include "program-return.hpp"
 
+#include <QElapsedTimer>
 #include <QTimer>
 #include <functional>
 #include <memory>
@@ -32,6 +33,9 @@ struct PhoneInfo {
 	bool charging = false;
 	int wifiDbm = 0;
 	double micDb = -100.0;
+	/** Round trip of the control channel, -1 until measured (the panel's latency figure). */
+	int rttMs = -1;
+	bool onAir = false;
 	/** Last camera picture sent while waiting for approval ("Aperçu · pas à l'antenne"). */
 	QImage preview;
 };
@@ -69,11 +73,15 @@ private:
 	void onAccepted();
 	void handleAccepted(const QString &type, const QJsonObject &message);
 	void pushState();
+	void ping();
 
 	QPointer<QTcpSocket> socket;
 	std::function<int()> allocatePort;
 	std::unique_ptr<PhoneCamera> camera;
 	QTimer stateTimer;
+	QTimer pingTimer;
+	QElapsedTimer pingClock;
+	int pingId = 0;
 	QJsonObject lastState;
 	int ticksSinceSent = 0;
 	DeviceStore &store;

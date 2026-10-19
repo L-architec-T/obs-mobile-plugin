@@ -12,7 +12,9 @@
 //   {"type":"layout","layout":"…"}
 //   {"type":"addToScene"}
 //   {"type":"return","state":"start"|"stop"}          video return of what OBS has on air
+//   {"type":"pong","id":n}                            answer to "ping"; "status" every 10 s too
 // PC -> phone
+//   {"type":"ping","id":n}                            every 3 s once accepted (latency in the panel)
 //   {"type":"welcome","protocol":1,"pc":"PC-STREAM","obs":"32.2.2"}
 //   {"type":"pairing","state":"pending"|"accepted"|"refused","token":"…"?}  (token when remembered)
 //   {"type":"stream","port":9711,"latencyMs":80}     where to send SRT (MPEG-TS, H.264 + AAC)

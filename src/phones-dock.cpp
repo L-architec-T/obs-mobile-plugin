@@ -23,6 +23,18 @@ QLabel *sectionTitle(const QString &text)
 	return label;
 }
 
+/** RSSI in words: what a streamer needs to know is whether the Wi-Fi will hold. */
+QString wifiQuality(int dbm)
+{
+	if (dbm >= -60)
+		return QStringLiteral("excellent");
+	if (dbm >= -70)
+		return QStringLiteral("bon");
+	if (dbm >= -80)
+		return QStringLiteral("faible");
+	return QStringLiteral("très faible");
+}
+
 QLabel *muted(const QString &text)
 {
 	auto *label = new QLabel(text);
@@ -123,9 +135,15 @@ void PhonesDock::rebuild()
 			requests->addWidget(banner);
 		} else if (phone->state() == PairState::Accepted) {
 			++connectedCount;
-			QStringList parts{info.name, info.address};
+			QStringList parts{info.name};
+			if (info.onAir)
+				parts << QStringLiteral("À L'ANTENNE");
 			if (info.battery >= 0)
-				parts << QStringLiteral("%1 %").arg(info.battery);
+				parts << QStringLiteral("batterie %1 %%2").arg(info.battery).arg(info.charging ? QStringLiteral(" (en charge)") : QString());
+			if (info.wifiDbm < 0)
+				parts << QStringLiteral("Wi-Fi %1").arg(wifiQuality(info.wifiDbm));
+			if (info.rttMs >= 0)
+				parts << QStringLiteral("%1 ms").arg(info.rttMs);
 			auto *row = new QWidget;
 			auto *layout = new QHBoxLayout(row);
 			layout->setContentsMargins(0, 0, 0, 0);
