@@ -29,7 +29,7 @@ Sans installateur : décompresse `obs-mobile-…-windows-x64.zip` dans
 `C:\ProgramData\obs-studio\plugins` (OBS fermé), pour obtenir
 `C:\ProgramData\obs-studio\plugins\obs-mobile\bin\64bit\obs-mobile.dll`.
 
-OBS Studio 31 ou plus récent, 64 bits.
+OBS Studio 32 ou plus récent, 64 bits.
 
 ## Réseau
 
