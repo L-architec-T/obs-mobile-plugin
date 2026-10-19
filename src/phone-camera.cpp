@@ -1,5 +1,6 @@
 #include "phone-camera.hpp"
 
+#include "blur-backdrop.hpp"
 #include "mobile-camera-source.hpp"
 
 #include <obs-frontend-api.h>
@@ -39,6 +40,23 @@ obs_sceneitem_t *findItem(obs_scene_t *scene, const char *sourceName)
 	return scene ? obs_scene_find_source(scene, sourceName) : nullptr;
 }
 
+/** "OBS Mobile · Flou" at the bottom of [scene], full canvas, hidden until a phone needs it. */
+obs_sceneitem_t *ensureBackdrop(obs_scene_t *scene)
+{
+	if (obs_sceneitem_t *existing = findItem(scene, kBackdropName))
+		return existing;
+	SourceRef current(obs_get_source_by_name(kBackdropName));
+	obs_source_t *src = current ? obs_source_get_ref(current.ptr)
+				    : obs_source_create(kBackdropSourceId, kBackdropName, nullptr, nullptr);
+	obs_sceneitem_t *item = obs_scene_add(scene, src);
+	obs_source_release(src);
+	if (!item)
+		return nullptr;
+	obs_sceneitem_set_visible(item, false);
+	obs_sceneitem_set_order(item, OBS_ORDER_MOVE_BOTTOM);
+	return item;
+}
+
 } // namespace
 
 namespace {
@@ -49,7 +67,7 @@ bool ownedByUs(obs_source_t *source)
 	if (!name || strncmp(name, kScenePrefix, strlen(kScenePrefix)) != 0)
 		return false;
 	const char *id = obs_source_get_unversioned_id(source);
-	if (strcmp(id, kCameraSourceId) == 0)
+	if (strcmp(id, kCameraSourceId) == 0 || strcmp(id, kBackdropSourceId) == 0)
 		return true;
 	// The WebSocket mode's Media Sources: named by the app, reading an SRT stream.
 	if (strcmp(id, "ffmpeg_source") != 0)
@@ -188,6 +206,7 @@ void PhoneCamera::ensureSource()
 		obs_source_set_muted(src, true);
 		obs_source_release(src);
 	}
+	ensureBackdrop(scene);
 	// Starts listening: a camera source never does on its own (see mobile-camera-source.cpp).
 	if (SourceRef ours(obs_get_source_by_name(name.constData())); ours)
 		obs_source_update(ours.ptr, settings);
@@ -224,7 +243,11 @@ void PhoneCamera::place()
 		break;
 	}
 	}
+	// With bounds, OBS keeps only the sign of the scale: a negative x flips the picture.
+	vec2 scale;
+	vec2_set(&scale, mirror ? -1.0f : 1.0f, 1.0f);
 	obs_sceneitem_defer_update_begin(it);
+	obs_sceneitem_set_scale(it, &scale);
 	obs_sceneitem_set_bounds_type(it, OBS_BOUNDS_SCALE_INNER);
 	obs_sceneitem_set_bounds_alignment(it, OBS_ALIGN_CENTER);
 	obs_sceneitem_set_bounds(it, &bounds);
@@ -276,11 +299,22 @@ void PhoneCamera::setLayout(Layout newLayout)
 	place();
 }
 
+void PhoneCamera::setMirror(bool on)
+{
+	mirror = on;
+	place();
+}
+
 void PhoneCamera::setVisible(bool visible)
 {
 	obs_sceneitem_t *it = item();
 	if (it && obs_sceneitem_visible(it) != visible)
 		obs_sceneitem_set_visible(it, visible);
+	// Full height: the sides show the scene below, blurred. Shown and hidden with the phone.
+	const bool blurred = visible && layout == Layout::Full;
+	if (obs_sceneitem_t *backdrop = findItem(camerasScene(false), kBackdropName);
+	    backdrop && obs_sceneitem_visible(backdrop) != blurred)
+		obs_sceneitem_set_visible(backdrop, blurred);
 	if (obs_source_t *s = source()) {
 		// The phone's mic follows its camera; the PC's mic is never touched.
 		if (obs_source_muted(s) == visible)

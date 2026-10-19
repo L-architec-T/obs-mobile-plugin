@@ -1,0 +1,43 @@
+// One pass of a 9-tap Gaussian blur along [texel] (1/size, times the direction). Run on a
+// downscaled copy of the scene, horizontally then vertically, a few times: a wide, cheap blur.
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform float2 texel;
+
+sampler_state linearClamp {
+	Filter = Linear;
+	AddressU = Clamp;
+	AddressV = Clamp;
+};
+
+struct VertData {
+	float4 pos : POSITION;
+	float2 uv : TEXCOORD0;
+};
+
+VertData VSDefault(VertData v)
+{
+	VertData o;
+	o.pos = mul(float4(v.pos.xyz, 1.0), ViewProj);
+	o.uv = v.uv;
+	return o;
+}
+
+float4 PSBlur(VertData v) : TARGET
+{
+	float4 c = image.Sample(linearClamp, v.uv) * 0.2270270270;
+	c += image.Sample(linearClamp, v.uv + texel * 1.3846153846) * 0.3162162162;
+	c += image.Sample(linearClamp, v.uv - texel * 1.3846153846) * 0.3162162162;
+	c += image.Sample(linearClamp, v.uv + texel * 3.2307692308) * 0.0702702703;
+	c += image.Sample(linearClamp, v.uv - texel * 3.2307692308) * 0.0702702703;
+	return c;
+}
+
+technique Draw
+{
+	pass
+	{
+		vertex_shader = VSDefault(v);
+		pixel_shader = PSBlur(v);
+	}
+}

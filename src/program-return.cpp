@@ -23,7 +23,9 @@ constexpr qint64 kMaxQueuedBytes = 512 * 1024;
 constexpr int kIdleStopMs = 5'000;
 constexpr int kKeyTimeoutMs = 3'000;
 
-enum FrameKind { Header = 0, KeyFrame = 1, Frame = 2 };
+constexpr int kReturnAudioBitrateKbps = 128;
+
+enum FrameKind { Header = 0, KeyFrame = 1, Frame = 2, AudioHeader = 3, AudioFrame = 4 };
 
 // The output's packets come on an OBS thread; they are forwarded to the live ProgramReturn, if any.
 std::mutex instanceMutex;
@@ -74,6 +76,18 @@ QSize ProgramReturn::size() const
 	const int width = std::min<int>(kReturnWidth, ovi.base_width) & ~1;
 	const int height = int(qint64(width) * ovi.base_height / ovi.base_width) & ~1;
 	return {width, height};
+}
+
+int ProgramReturn::sampleRate() const
+{
+	audio_t *audio = obs_get_audio();
+	return audio ? int(audio_output_get_sample_rate(audio)) : 48000;
+}
+
+int ProgramReturn::channels() const
+{
+	audio_t *audio = obs_get_audio();
+	return audio ? int(audio_output_get_channels(audio)) : 2;
 }
 
 QByteArray ProgramReturn::issueKey(QObject *owner)
@@ -164,6 +178,24 @@ void ProgramReturn::onPacket(int kind, qint64 ptsUs, const QByteArray &data)
 		header = data;
 		return;
 	}
+	if (kind == AudioHeader) {
+		audioHeader = data;
+		return;
+	}
+	if (kind == AudioFrame) {
+		for (Viewer &viewer : viewers) {
+			// Sound is the first thing dropped on a slow Wi-Fi; the picture matters more.
+			if (!viewer.socket || !viewer.started || audioHeader.isEmpty() ||
+			    viewer.socket->bytesToWrite() > kMaxQueuedBytes / 2)
+				continue;
+			if (!viewer.audioStarted) {
+				sendFrame(viewer.socket, AudioHeader, ptsUs, audioHeader);
+				viewer.audioStarted = true;
+			}
+			sendFrame(viewer.socket, AudioFrame, ptsUs, data);
+		}
+		return;
+	}
 	for (Viewer &viewer : viewers) {
 		if (!viewer.socket)
 			continue;
@@ -182,7 +214,7 @@ void ProgramReturn::onPacket(int kind, qint64 ptsUs, const QByteArray &data)
 
 void ProgramReturn::packetCallback(void *, encoder_packet *packet)
 {
-	if (!packet || packet->type != OBS_ENCODER_VIDEO || !packet->size)
+	if (!packet || !packet->size)
 		return;
 	const qint64 ptsUs = packet->timebase_den
 				     ? packet->pts * 1'000'000 * packet->timebase_num / packet->timebase_den
@@ -190,6 +222,26 @@ void ProgramReturn::packetCallback(void *, encoder_packet *packet)
 	std::lock_guard lock(instanceMutex);
 	if (!instance)
 		return;
+	if (packet->type == OBS_ENCODER_AUDIO) {
+		// The AudioSpecificConfig is known once the encoder runs: sent along until the UI has it.
+		uint8_t *extra = nullptr;
+		size_t extraSize = 0;
+		if (instance->audioEncoder && obs_encoder_get_extra_data(instance->audioEncoder, &extra, &extraSize) &&
+		    extraSize) {
+			QByteArray config(reinterpret_cast<const char *>(extra), qsizetype(extraSize));
+			QMetaObject::invokeMethod(
+				instance, [self = instance, config] {
+					if (self->audioHeader != config)
+						self->onPacket(AudioHeader, 0, config);
+				},
+				Qt::QueuedConnection);
+		}
+		QByteArray data(reinterpret_cast<const char *>(packet->data), qsizetype(packet->size));
+		QMetaObject::invokeMethod(
+			instance, [self = instance, ptsUs, data] { self->onPacket(AudioFrame, ptsUs, data); },
+			Qt::QueuedConnection);
+		return;
+	}
 	if (packet->keyframe) {
 		uint8_t *extra = nullptr;
 		size_t extraSize = 0;
@@ -245,12 +297,24 @@ bool ProgramReturn::startOutput()
 	}
 	obs_encoder_set_video(encoder, obs_get_video());
 
+	// Track 1, as the stream usually has it.
+	obs_data_t *audioSettings = obs_data_create();
+	obs_data_set_int(audioSettings, "bitrate", kReturnAudioBitrateKbps);
+	audioEncoder = obs_audio_encoder_create("ffmpeg_aac", "OBS Mobile · retour son", audioSettings, 0, nullptr);
+	obs_data_release(audioSettings);
+	if (!audioEncoder) {
+		obs_log(LOG_ERROR, "Video return: cannot create the AAC encoder");
+		return false;
+	}
+	obs_encoder_set_audio(audioEncoder, obs_get_audio());
+
 	output = obs_output_create("obs_mobile_return", "OBS Mobile · retour", nullptr, nullptr);
 	if (!output) {
 		obs_log(LOG_ERROR, "Video return: cannot create the output");
 		return false;
 	}
 	obs_output_set_video_encoder(output, encoder);
+	obs_output_set_audio_encoder(output, audioEncoder, 0);
 	if (!obs_output_start(output)) {
 		const char *error = obs_output_get_last_error(output);
 		obs_log(LOG_ERROR, "Video return: cannot start (%s)", error ? error : "unknown error");
@@ -268,14 +332,19 @@ void ProgramReturn::stopOutput()
 		obs_output_release(output);
 		output = nullptr;
 	}
-	if (encoder) {
-		std::lock_guard lock(instanceMutex); // the packet callback reads it
+	{
+		std::lock_guard lock(instanceMutex); // the packet callback reads them
 		obs_encoder_release(encoder);
+		obs_encoder_release(audioEncoder);
 		encoder = nullptr;
+		audioEncoder = nullptr;
 	}
 	header.clear();
-	for (Viewer &viewer : viewers)
+	audioHeader.clear();
+	for (Viewer &viewer : viewers) {
 		viewer.started = false;
+		viewer.audioStarted = false;
+	}
 	if (running)
 		obs_log(LOG_INFO, "Video return stopped");
 	running = false;
@@ -285,7 +354,7 @@ void registerReturnOutput()
 {
 	obs_output_info info = {};
 	info.id = "obs_mobile_return";
-	info.flags = OBS_OUTPUT_VIDEO | OBS_OUTPUT_ENCODED;
+	info.flags = OBS_OUTPUT_AV | OBS_OUTPUT_ENCODED;
 	info.get_name = [](void *) { return "OBS Mobile · retour"; };
 	info.create = [](obs_data_t *, obs_output_t *output) -> void * { return new ReturnOutput{output}; };
 	info.destroy = [](void *data) { delete static_cast<ReturnOutput *>(data); };

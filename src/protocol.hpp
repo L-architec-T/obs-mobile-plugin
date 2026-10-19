@@ -7,9 +7,10 @@
 //   {"type":"status","battery":82,"charging":false,"wifi":-55,"micDb":-23.5}
 //   {"type":"preview","jpeg":"<base64>"}            (only while waiting for approval, ~360p)
 //   once accepted:
-//   {"type":"camera","state":"start","layout":"full"|"side"|"corner"}  -> PC answers "stream"
+//   {"type":"camera","state":"start","layout":"full"|"side"|"corner","mirror":bool}  -> "stream"
 //   {"type":"camera","state":"stop"}
 //   {"type":"layout","layout":"…"}
+//   {"type":"mirror","on":bool}                       picture flipped left-right in OBS
 //   {"type":"addToScene"}
 //   {"type":"return","state":"start"|"stop"}          video return of what OBS has on air
 //   {"type":"pong","id":n}                            answer to "ping"; "status" every 10 s too
@@ -21,7 +22,7 @@
 //   {"type":"state","scene":"…","live":bool,"durationMs":n?,"receiving":bool,"onAir":bool,
 //    "inScene":bool,"layout":"…","cameraError":"…"?}  on change, and every 2 s; cameraError
 //                    says why OBS cannot receive the phone (French, shown as is)
-//   {"type":"return","port":4461,"key":"…","width":960,"height":540}
+//   {"type":"return","port":4461,"key":"…","width":960,"height":540,"sampleRate":48000,"channels":2}
 //                    connect to port, send key + "\n", then read H.264 frames (program-return.hpp)
 
 namespace obsmobile {

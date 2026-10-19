@@ -39,6 +39,8 @@ public:
 	void start(Layout layout);
 	void stop();
 	void setLayout(Layout layout);
+	/** Flips the phone's picture left-right in OBS. */
+	void setMirror(bool on);
 	void addToCurrentScene();
 
 	/** Applies visibility from what is received; returns the state to send to the phone. */
@@ -56,6 +58,7 @@ private:
 	int srtPort;
 	Layout layout = Layout::Corner;
 	bool wantOnAir = false;
+	bool mirror = false;
 };
 
 } // namespace obsmobile

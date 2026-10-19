@@ -16,12 +16,13 @@ namespace obsmobile {
 
 /**
  * Video return: what OBS has on air (its main output), encoded in H.264 by OBS's own x264 at
- * about 540p, sent to the phones that ask for it on [kReturnPort]. A dedicated output runs only
+ * about 540p with its sound in AAC (track 1), sent to the phones that ask for it on [kReturnPort]. A dedicated output runs only
  * while at least one phone watches; the stream and recordings are not touched. UI thread only,
  * except the packet callback which hops onto it.
  *
  * Wire format, per frame: u32 big-endian length (of what follows), u8 kind (0 = SPS/PPS,
- * 1 = key frame, 2 = frame), i64 big-endian pts in µs, then the Annex B H.264 data.
+ * 1 = key frame, 2 = frame: Annex B H.264; 3 = AAC AudioSpecificConfig, 4 = raw AAC frame),
+ * i64 big-endian pts in µs, then the data. Sound only follows a phone's first key frame.
  */
 class ProgramReturn : public QObject {
 	Q_OBJECT
@@ -37,6 +38,8 @@ public:
 	void release(QObject *owner);
 
 	QSize size() const;
+	int sampleRate() const;
+	int channels() const;
 
 	static void packetCallback(void *data, encoder_packet *packet);
 
@@ -44,7 +47,8 @@ private:
 	struct Viewer {
 		QPointer<QTcpSocket> socket;
 		QObject *owner = nullptr;
-		bool started = false; // first key frame sent
+		bool started = false;      // first key frame sent
+		bool audioStarted = false; // AudioSpecificConfig sent
 	};
 
 	void onNewConnection();
@@ -59,9 +63,11 @@ private:
 	QHash<QByteArray, QObject *> keys;
 	QList<Viewer> viewers;
 	QByteArray header;
+	QByteArray audioHeader;
 	QTimer idleStop;
 	obs_output_t *output = nullptr;
 	obs_encoder_t *encoder = nullptr;
+	obs_encoder_t *audioEncoder = nullptr;
 	bool running = false;
 };
 

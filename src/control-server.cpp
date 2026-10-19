@@ -98,6 +98,7 @@ void PhoneConnection::handleAccepted(const QString &type, const QJsonObject &mes
 {
 	if (type == "camera") {
 		if (message["state"].toString() == "start") {
+			camera->setMirror(message["mirror"].toBool());
 			camera->start(layoutFromName(message["layout"].toString()));
 			send({{"type", "stream"}, {"port", camera->port()}, {"latencyMs", 80}});
 		} else {
@@ -106,6 +107,9 @@ void PhoneConnection::handleAccepted(const QString &type, const QJsonObject &mes
 		pushState();
 	} else if (type == "layout") {
 		camera->setLayout(layoutFromName(message["layout"].toString()));
+		pushState();
+	} else if (type == "mirror") {
+		camera->setMirror(message["on"].toBool());
 		pushState();
 	} else if (type == "addToScene") {
 		camera->addToCurrentScene();
@@ -123,7 +127,9 @@ void PhoneConnection::handleAccepted(const QString &type, const QJsonObject &mes
 			      {"port", kReturnPort},
 			      {"key", QString::fromLatin1(programReturn.issueKey(this))},
 			      {"width", size.width()},
-			      {"height", size.height()}});
+			      {"height", size.height()},
+			      {"sampleRate", programReturn.sampleRate()},
+			      {"channels", programReturn.channels()}});
 		} else {
 			programReturn.release(this);
 		}

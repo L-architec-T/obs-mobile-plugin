@@ -8,6 +8,7 @@ the Free Software Foundation; either version 2 of the License, or
 (at your option) any later version.
 */
 
+#include "blur-backdrop.hpp"
 #include "control-server.hpp"
 #include "device-store.hpp"
 #include "mdns-announcer.hpp"
@@ -74,6 +75,7 @@ bool obs_module_load(void)
 {
 	registerCameraSource();
 	registerReturnOutput();
+	registerBlurBackdrop();
 	obs_frontend_add_event_callback(onFrontendEvent, nullptr);
 	obs_log(LOG_INFO, "plugin loaded (version %s)", PLUGIN_VERSION);
 	return true;

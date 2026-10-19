@@ -52,6 +52,7 @@ target_sources(
     src/phone-camera.cpp
     src/mobile-camera-source.cpp
     src/program-return.cpp
+    src/blur-backdrop.cpp
 )
 
 # FFmpeg (with SRT) decodes the phones' streams: OBS's own copy on Windows (obs-deps), the
