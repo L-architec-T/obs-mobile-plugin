@@ -1,59 +1,43 @@
-# OBS Plugin Template
+# OBS Mobile — plugin pour OBS Studio
 
-## Introduction
+Transforme ton téléphone Android en caméra et en micro pour OBS, avec l'app **OBS Mobile**.
 
-The plugin template is meant to be used as a starting point for OBS Studio plugin development. It includes:
+- **Connexion directe** : OBS s'annonce sur le Wi-Fi, le téléphone le trouve seul. Pas de serveur
+  WebSocket à activer, pas de mot de passe ni de QR code : tu acceptes le téléphone dans OBS, une
+  seule fois.
+- **Caméra à faible latence** : l'image du téléphone arrive dans une vraie source OBS, placée dans
+  la scène « OBS Mobile · Caméras » (plein écran, côte à côte ou en vignette).
+- **Retour vidéo** : le téléphone affiche ce qui est à l'antenne, en direct.
+- **Panneau « Téléphones »** (menu *Docks*) : demandes de connexion, téléphones connectés et
+  mémorisés, « Tout déconnecter ».
 
-* Boilerplate plugin source code
-* A CMake project file
-* GitHub Actions workflows and repository actions
+Le plugin ne touche jamais aux réglages de sortie d'OBS (stream, enregistrement) ni aux sources
+qu'il n'a pas créées.
 
-## Supported Build Environments
+## Installation (Windows)
 
-| Platform  | Tool   |
-|-----------|--------|
-| Windows   | Visual Studio 17 2022 |
-| macOS     | XCode 16.0 |
-| Windows, macOS  | CMake 3.30.5 |
-| Ubuntu 24.04 | CMake 3.28.3 |
-| Ubuntu 24.04 | `ninja-build` |
-| Ubuntu 24.04 | `pkg-config`
-| Ubuntu 24.04 | `build-essential` |
+1. Télécharge la dernière version dans [Releases](https://github.com/L-architec-T/obs-mobile-plugin/releases).
+2. Ferme OBS, puis décompresse l'archive dans le dossier d'OBS
+   (par défaut `C:\Program Files\obs-studio`), en acceptant de fusionner les dossiers.
+3. Rouvre OBS. Au premier lancement, autorise OBS dans le pare-feu Windows (réseau privé).
+4. Sur le téléphone, ouvre OBS Mobile : ton PC apparaît avec le badge « PLUGIN ✓ ».
 
-## Quick Start
+OBS Studio 31 ou plus récent, 64 bits.
 
-An absolute bare-bones [Quick Start Guide](https://github.com/obsproject/obs-plugintemplate/wiki/Quick-Start-Guide) is available in the wiki.
+## Réseau
 
-## Documentation
+| Port | Protocole | Rôle |
+|------|-----------|------|
+| 4460 | TCP | canal de contrôle (appairage, état) |
+| 4461 | TCP | retour vidéo vers les téléphones |
+| 9711 et suivants | UDP (SRT) | caméra et micro de chaque téléphone |
 
-All documentation can be found in the [Plugin Template Wiki](https://github.com/obsproject/obs-plugintemplate/wiki).
+## Compiler
 
-Suggested reading to get up and running:
+Basé sur [obs-plugintemplate](https://github.com/obsproject/obs-plugintemplate) : voir son wiki.
+Sous Linux : `libobs-dev`, `qt6-base-dev`, `libavahi-client-dev`, FFmpeg avec SRT, puis
+`cmake --preset ubuntu-x86_64 && cmake --build build_x86_64`.
 
-* [Getting started](https://github.com/obsproject/obs-plugintemplate/wiki/Getting-Started)
-* [Build system requirements](https://github.com/obsproject/obs-plugintemplate/wiki/Build-System-Requirements)
-* [Build system options](https://github.com/obsproject/obs-plugintemplate/wiki/CMake-Build-System-Options)
+## Licence
 
-## GitHub Actions & CI
-
-Default GitHub Actions workflows are available for the following repository actions:
-
-* `push`: Run for commits or tags pushed to `master` or `main` branches.
-* `pr-pull`: Run when a Pull Request has been pushed or synchronized.
-* `dispatch`: Run when triggered by the workflow dispatch in GitHub's user interface.
-* `build-project`: Builds the actual project and is triggered by other workflows.
-* `check-format`: Checks CMake and plugin source code formatting and is triggered by other workflows.
-
-The workflows make use of GitHub repository actions (contained in `.github/actions`) and build scripts (contained in `.github/scripts`) which are not needed for local development, but might need to be adjusted if additional/different steps are required to build the plugin.
-
-### Retrieving build artifacts
-
-Successful builds on GitHub Actions will produce build artifacts that can be downloaded for testing. These artifacts are commonly simple archives and will not contain package installers or installation programs.
-
-### Building a Release
-
-To create a release, an appropriately named tag needs to be pushed to the `main`/`master` branch using semantic versioning (e.g., `12.3.4`, `23.4.5-beta2`). A draft release will be created on the associated repository with generated installer packages or installation programs attached as release artifacts.
-
-## Signing and Notarizing on macOS
-
-Basic concepts of codesigning and notarization on macOS are explained in the correspodning [Wiki article](https://github.com/obsproject/obs-plugintemplate/wiki/Codesigning-On-macOS) which has a specific section for the [GitHub Actions setup](https://github.com/obsproject/obs-plugintemplate/wiki/Codesigning-On-macOS#setting-up-code-signing-for-github-actions).
+GPL v2 ou ultérieure, comme OBS Studio : voir [LICENSE](LICENSE).
